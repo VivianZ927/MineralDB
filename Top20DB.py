@@ -207,7 +207,7 @@ app.layout = html.Div(
         )])
 
 
-# server = app.server
+server = app.server
 
 
 # ---------- Single Multi-Output Callback ----------

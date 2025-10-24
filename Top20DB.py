@@ -3,7 +3,6 @@ from dash import Dash, html, dash_table, dcc, callback, Output, Input
 import pandas as pd
 import plotly.express as px
 
-
 # ---------- Config ----------
 PICKLE_PATH = "ea26Top20.pkl"
 DEFAULT_MINERAL = "Magnesium"  # default selection
@@ -151,6 +150,15 @@ def build_chart_table(initial_table, initial_dot):
     return table_list, Dot_Charts
 
 
+def sanitize_periods(base):
+    for _, dct in base.items():
+        for _, df in dct.items():
+            if isinstance(df.index, pd.PeriodIndex):
+                df.index = df.index.to_timestamp()
+            for c in df.select_dtypes(include="period").columns:
+                df[c] = df[c].dt.to_timestamp()
+
+
 # ---------- Dash App ----------
 app = Dash(title="Mineral Analysis")
 server = app.server
@@ -160,6 +168,7 @@ with open(PICKLE_PATH, 'rb') as handle:
     BASE = pickle.load(handle)
 k = 5
 BASE = get_top(BASE, k)
+sanitize_periods(BASE)
 minerals = get_minerals(BASE)
 if DEFAULT_MINERAL not in minerals and len(minerals) > 0:
     DEFAULT_MINERAL = minerals[0]
@@ -209,9 +218,6 @@ app.layout = html.Div(
             ]
 
         )])
-
-
-
 
 
 # ---------- Single Multi-Output Callback ----------

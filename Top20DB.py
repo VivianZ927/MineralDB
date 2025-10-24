@@ -3,6 +3,7 @@ from dash import Dash, html, dash_table, dcc, callback, Output, Input
 import pandas as pd
 import plotly.express as px
 
+
 # ---------- Config ----------
 PICKLE_PATH = "ea26Top20.pkl"
 DEFAULT_MINERAL = "Magnesium"  # default selection
@@ -78,6 +79,8 @@ def build_dot_fig(month_agg, mineral):
     for m, d in ma.items():
         d.rename(columns={"monthly concentration": "Detected Concentration", "YearMonth": "Time"}, inplace=True)
         mineral_col = m
+        if "Time" in d.columns and isinstance(type(d["Time"]), pd.PeriodDtype):
+            d["Time"] = d["Time"].dt.to_timestamp()
         # Safe padding even if all equal
         ymin = d["Detected Concentration"].min()
         ymax = d["Detected Concentration"].max()

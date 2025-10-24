@@ -150,6 +150,7 @@ def build_chart_table(initial_table, initial_dot):
 
 # ---------- Dash App ----------
 app = Dash(title="Mineral Analysis")
+server = app.server
 # k is the pre-set parameters, the sampling points which you would like to display
 # Load data (deserialize) The BASE here is the top 20 data for each mineral features, including the total ones.
 with open(PICKLE_PATH, 'rb') as handle:
@@ -207,7 +208,7 @@ app.layout = html.Div(
         )])
 
 
-server = app.server
+
 
 
 # ---------- Single Multi-Output Callback ----------

@@ -249,6 +249,7 @@ def build_chart_table(initial_table, initial_dot):
 
 # ---------- Dash App ----------
 app = Dash(title="Mineral Analysis")
+server=app.server
 # k is the pre-set parameters, the sampling points which you would like to display
 k = 5
 # Precompute initial displays for DEFAULT_MINERAL (so the app isn't blank at load)

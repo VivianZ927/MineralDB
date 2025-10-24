@@ -2,4 +2,3 @@ dash==3.2.0
 pandas
 plotly
 gunicorn
-pickle

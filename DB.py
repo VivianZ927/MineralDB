@@ -267,7 +267,7 @@ app.layout = html.Div(
                     [
                         html.H1("UK Mineral Analysis Dashboard",
                                 style={"margin": 0, "fontSize": "24px", "fontWeight": 1000}),
-                        html.Img(src=app.get_asset_url("Hydrostar.png"), style={"height": "70px"})
+                        html.Img(src=app.get_asset_url("logo.png"), style={"height": "70px"})
                     ],
                     style={
                         "display": "flex",

@@ -2,6 +2,7 @@ import pickle
 from dash import Dash, html, dash_table, dcc, callback, Output, Input
 import pandas as pd
 import plotly.express as px
+from pandas.api.types import is_period_dtype, is_datetime64_any_dtype, is_timedelta64_dtype
 
 # ---------- Config ----------
 PICKLE_PATH = "ea26Top20.pkl"
@@ -155,8 +156,19 @@ def sanitize_periods(base):
         for _, df in dct.items():
             if isinstance(df.index, pd.PeriodIndex):
                 df.index = df.index.to_timestamp()
-            for c in df.select_dtypes(include="period").columns:
-                df[c] = df[c].dt.to_timestamp()
+
+            for c in df.columns:
+                s = df[c]
+                try:
+                    if isinstance(s, pd.PeriodIndex):
+                        df[c] = s.dt.to_timestamp()        # or s.astype(str)
+                    elif is_datetime64_any_dtype(s) and getattr(s.dtype, "tz", None):
+                        df[c] = s.dt.tz_convert("UTC").dt.tz_localize(None)
+                    elif is_timedelta64_dtype(s):
+                        df[c] = (s.astype("int64") / 1e9)  # seconds float; or s.astype(str)
+                except Exception:
+                    # Be defensive—if any column misbehaves, skip coercion rather than crash at import
+                    pass
 
 
 # ---------- Dash App ----------

@@ -3,7 +3,7 @@ from dash import Dash, html, dash_table, dcc, callback, Output, Input
 import pandas as pd
 import plotly.express as px
 from pandas.api.types import is_timedelta64_dtype
-from pandas.core.dtypes.common import is_period_dtype
+
 
 # ---------- Config ----------
 PICKLE_PATH = "ea26Top20.pkl"
@@ -138,7 +138,7 @@ def sanitize_base(base):
 def build_geo_fig(point_agg, mineral, k):
     df = point_agg[mineral]["Total"].copy()
 
-    df = df.drop(columns=["YearMonth"])
+    df = df.drop(columns=["YearMonth"],errors="ignore")
 
     # Keep only the columns you actually use
     df = df[["Sampling Point", "lat", "long", "Type", "average monthly concentration"]]
@@ -165,25 +165,29 @@ def build_dot_fig(month_agg, mineral):
     ma = month_agg[mineral]
 
     for m, d in ma.items():
+        d=d.copy()
         d.rename(columns={"monthly concentration": "Detected Concentration", "YearMonth": "Time"}, inplace=True)
-        mineral_col = m
-        if "Time" in d.columns and isinstance(type(d["Time"]), pd.PeriodDtype):
-            d["Time"] = d["Time"].dt.to_timestamp()
+
+        if "Time" in d.columns:
+            dtype_str = str(getattr(d["Time"], "dtype", ""))
+            # robust, isinstance-friendly (no is_period_dtype):
+            if isinstance(getattr(d["Time"], "dtype", None), pd.PeriodDtype) or dtype_str.startswith("period["):
+                d["Time"] = d["Time"].dt.to_timestamp()
+
         # Safe padding even if all equal
         ymin = d["Detected Concentration"].min()
         ymax = d["Detected Concentration"].max()
+
         fig = px.scatter(
             d,
             x="Time",
             y="Detected Concentration",
             color="Sampling Point",
             symbol="Sampling Point",
-            title=f"Concentration of {mineral_col}",
+            title=f"Concentration of {m}",
         )
 
-        if pd.isna(ymin) or pd.isna(ymax):
-            pass
-        else:
+        if  pd.notna(ymin) and pd.notna(ymax):
             pad = max(1.0, 0.05 * (ymax - ymin) if ymax > ymin else 1.0)
             fig.update_layout(yaxis_range=[ymin - pad, ymax + pad])
         fig.update_traces(marker=dict(size=12))

@@ -2,7 +2,8 @@ import pickle
 from dash import Dash, html, dash_table, dcc, callback, Output, Input
 import pandas as pd
 import plotly.express as px
-from pandas.api.types import is_period_dtype, is_datetime64_any_dtype, is_timedelta64_dtype
+from pandas.api.types import is_timedelta64_dtype
+from pandas.core.dtypes.common import is_period_dtype
 
 # ---------- Config ----------
 PICKLE_PATH = "ea26Top20.pkl"
@@ -53,18 +54,93 @@ def get_minerals(dfs):
 
 # ---------- Helpers ----------
 
+# --- helpers that avoid is_period_dtype --------------------------------------
+def _series_is_period(s: pd.Series) -> bool:
+    """Detect pandas Period dtype using isinstance; fall back safely if needed."""
+    dt = getattr(s, "dtype", None)
+
+    # Preferred: dtype is a PeriodDtype
+    try:
+        from pandas import PeriodDtype  # public alias in modern pandas
+        if isinstance(dt, PeriodDtype):
+            return True
+    except Exception:
+        pass
+
+    # Also works: underlying array is a PeriodArray
+    try:
+        from pandas.arrays import PeriodArray
+        if isinstance(getattr(s, "array", None), PeriodArray):
+            return True
+    except Exception:
+        pass
+
+    # Conservative fallback if classes unavailable
+    return str(dt).startswith("period[")
+
+
+def _series_is_tzaware_datetime(s: pd.Series) -> bool:
+    """Detect tz-aware datetimes using isinstance on the dtype."""
+    try:
+        from pandas import DatetimeTZDtype
+        return isinstance(getattr(s, "dtype", None), DatetimeTZDtype)
+    except Exception:
+        return False
+
+
+def _series_is_timedelta(s: pd.Series) -> bool:
+    """Detect timedeltas using isinstance; fallback to dtype.kind == 'm'."""
+    try:
+        from pandas import TimedeltaDtype
+        if isinstance(getattr(s, "dtype", None), TimedeltaDtype):
+            return True
+    except Exception:
+        pass
+    return getattr(getattr(s, "dtype", None), "kind", "") == "m"
+
+
+# --- main sanitizer -----------------------------------------------------------
+def sanitize_base(base):
+    """
+    Mutates frames in `base` in-place:
+      - PeriodIndex -> Timestamp index
+      - Period series -> Timestamp (for time-like columns) or string
+      - tz-aware datetimes -> naive UTC
+      - timedeltas -> seconds (float)
+    """
+    for mineral, dct in base.items():
+        for name, df in dct.items():
+            # Index
+            if isinstance(df.index, pd.PeriodIndex):
+                df.index = df.index.to_timestamp()
+
+            # Columns
+            for col in list(df.columns):
+                s = df[col]
+                try:
+                    if _series_is_period(s):
+                        # If it's clearly a time axis, keep as timestamps; else stringify
+                        if col.lower() in ("yearmonth", "time", "month", "period", "date"):
+                            df[col] = s.dt.to_timestamp()
+                        else:
+                            df[col] = s.astype(str)
+
+                    elif _series_is_tzaware_datetime(s):
+                        # Convert to UTC and drop tz to make it JSON-serializable
+                        df[col] = s.dt.tz_convert("UTC").dt.tz_localize(None)
+
+                    elif _series_is_timedelta(s):
+                        # Convert to seconds (float). Use .astype('int64')/1e9 for ns->sec.
+                        df[col] = (s.astype("int64") / 1e9)
+                except Exception:
+                    # Be defensive—never crash during import
+                    pass
+
 
 def build_geo_fig(point_agg, mineral, k):
     df = point_agg[mineral]["Total"].copy()
 
-    # Remove or coerce Periods that Plotly would try to serialize
-    if "YearMonth" in df.columns:
-        if is_period_dtype(df["YearMonth"]):
-            # either convert…
-            df["YearMonth"] = df["YearMonth"].dt.to_timestamp()
-        else:
-            # …or just drop if you don't need it in the geo chart
-            df = df.drop(columns=["YearMonth"])
+    df = df.drop(columns=["YearMonth"])
 
     # Keep only the columns you actually use
     df = df[["Sampling Point", "lat", "long", "Type", "average monthly concentration"]]
@@ -165,23 +241,29 @@ def build_chart_table(initial_table, initial_dot):
     return table_list, Dot_Charts
 
 
-def sanitize_periods(base):
-    for _, dct in base.items():
-        for _, df in dct.items():
+def sanitize_base(base):
+    for mineral, dct in base.items():
+        for name, df in dct.items():
+            # Index: PeriodIndex → Timestamp
             if isinstance(df.index, pd.PeriodIndex):
                 df.index = df.index.to_timestamp()
 
-            for c in df.columns:
-                s = df[c]
+            # Columns: coerce tricky dtypes
+            for col in list(df.columns):
+                s = df[col]
                 try:
-                    if isinstance(s, pd.PeriodIndex):
-                        df[c] = s.dt.to_timestamp()  # or s.astype(str)
-                    elif is_datetime64_any_dtype(s) and getattr(s.dtype, "tz", None):
-                        df[c] = s.dt.tz_convert("UTC").dt.tz_localize(None)
+                    if _is_period_series(s):
+                        # Prefer timestamps for time-like names; else strings
+                        if col.lower() in ("yearmonth", "time", "month", "period"):
+                            df[col] = s.dt.to_timestamp()
+                        else:
+                            df[col] = s.astype(str)
+                    elif _is_tzaware_datetime_series(s):
+                        df[col] = s.dt.tz_convert("UTC").dt.tz_localize(None)
                     elif is_timedelta64_dtype(s):
-                        df[c] = (s.astype("int64") / 1e9)  # seconds float; or s.astype(str)
+                        df[col] = (s.astype("int64") / 1e9)  # seconds as float
                 except Exception:
-                    # Be defensive—if any column misbehaves, skip coercion rather than crash at import
+                    # Never crash during import
                     pass
 
 

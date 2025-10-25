@@ -78,7 +78,6 @@ def _series_is_period(s: pd.Series) -> bool:
     # Conservative fallback if classes unavailable
     return str(dt).startswith("period[")
 
-
 def _series_is_tzaware_datetime(s: pd.Series) -> bool:
     """Detect tz-aware datetimes using isinstance on the dtype."""
     try:
@@ -86,7 +85,6 @@ def _series_is_tzaware_datetime(s: pd.Series) -> bool:
         return isinstance(getattr(s, "dtype", None), DatetimeTZDtype)
     except Exception:
         return False
-
 
 def _series_is_timedelta(s: pd.Series) -> bool:
     """Detect timedeltas using isinstance; fallback to dtype.kind == 'm'."""
@@ -276,7 +274,7 @@ with open(PICKLE_PATH, 'rb') as handle:
     BASE = pickle.load(handle)
 k = 5
 BASE = get_top(BASE, k)
-sanitize_periods(BASE)
+sanitize_base(BASE)
 minerals = get_minerals(BASE)
 if DEFAULT_MINERAL not in minerals and len(minerals) > 0:
     DEFAULT_MINERAL = minerals[0]

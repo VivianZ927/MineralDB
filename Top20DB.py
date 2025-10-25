@@ -55,16 +55,30 @@ def get_minerals(dfs):
 
 
 def build_geo_fig(point_agg, mineral, k):
-    total_point_agg = point_agg[mineral]["Total"]
+    df = point_agg[mineral]["Total"].copy()
+
+    # Remove or coerce Periods that Plotly would try to serialize
+    if "YearMonth" in df.columns:
+        if is_period_dtype(df["YearMonth"]):
+            # either convert…
+            df["YearMonth"] = df["YearMonth"].dt.to_timestamp()
+        else:
+            # …or just drop if you don't need it in the geo chart
+            df = df.drop(columns=["YearMonth"])
+
+    # Keep only the columns you actually use
+    df = df[["Sampling Point", "lat", "long", "Type", "average monthly concentration"]]
+
     fig = px.scatter_geo(
-        total_point_agg,
+        df,
         color="Sampling Point",
         lat="lat",
         lon="long",
         hover_name="Sampling Point",
         size="average monthly concentration",
-        # projection="natural earth",
-        opacity=0.5
+        opacity=0.5,
+        # Be explicit so Plotly doesn't grab extra columns
+        hover_data={"Type": True, "average monthly concentration": ':.2f'}
     )
     fig.update_layout(
         geo=UK_GEO,
@@ -161,7 +175,7 @@ def sanitize_periods(base):
                 s = df[c]
                 try:
                     if isinstance(s, pd.PeriodIndex):
-                        df[c] = s.dt.to_timestamp()        # or s.astype(str)
+                        df[c] = s.dt.to_timestamp()  # or s.astype(str)
                     elif is_datetime64_any_dtype(s) and getattr(s.dtype, "tz", None):
                         df[c] = s.dt.tz_convert("UTC").dt.tz_localize(None)
                     elif is_timedelta64_dtype(s):
